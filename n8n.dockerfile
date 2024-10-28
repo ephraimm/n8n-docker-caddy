@@ -1,5 +1,5 @@
 FROM docker.n8n.io/n8nio/n8n
 
 USER root
-RUN apt-get update && apt-get install -y poppler-utils && apt-get clean
+RUN apk add --no-cache poppler-utils
 USER node
