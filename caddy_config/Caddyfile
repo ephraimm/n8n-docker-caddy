@@ -1,5 +1,10 @@
-n8n.<domain>.<suffix> {
+n8n.goseamless.co.za {
     reverse_proxy n8n:5678 {
+      flush_interval -1
+    }
+}
+sefaria.goseamless.co.za {
+  reverse_proxy localhost:8000 {
       flush_interval -1
     }
 }

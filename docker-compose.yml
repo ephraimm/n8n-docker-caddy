@@ -1,4 +1,3 @@
-version: "3.7"
 
 services:
   caddy:
@@ -27,7 +26,7 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ${DATA_FOLDER}/local_files:/files
-      
+
 volumes:
   caddy_data:
     external: true
