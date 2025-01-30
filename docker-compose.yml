@@ -9,11 +9,59 @@ services:
       - caddy_data:/data
       - ${DATA_FOLDER}/caddy_config:/config
       - ${DATA_FOLDER}/caddy_config/Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
 
   gotenberg:
     image: gotenberg/gotenberg:8
+    environment:
+      - LOG_LEVEL=DEBUG
     ports:
       - "3030:3000"
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
 
   n8n:
     build:
@@ -22,6 +70,8 @@ services:
     restart: always
     ports:
       - 5678:5678
+    env_file:
+      - .env
     environment:
       - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
       - N8N_PORT=5678
@@ -29,12 +79,198 @@ services:
       - NODE_ENV=production
       - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - GOOGLE_APPLICATION_CREDENTIALS=/files/${GOOGLE_APPLICATION_CREDENTIALS_FILE}
+      - N8N_LOG_LEVEL=debug
+      - N8N_SMTP_HOST=smtp.gmail.com
+      - N8N_SMTP_PORT=587
+      - N8N_SMTP_USER=ephraim@goseamless.co.za
+      - N8N_SMTP_PASS=frioohwbgvliqgds
+      - N8N_SMTP_SENDER=noreply@goseamless.co.za
+      - N8N_SMTP_SSL=false
+      - N8N_SMTP_TLS=true
+      - N8N_SMTP_IGNORE_TLS=false
     volumes:
       - n8n_data:/home/node/.n8n
       - ${DATA_FOLDER}/local_files:/files
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+
+  # ollama:
+    # image: ollama/ollama:latest
+    # ports:
+    #   - "11434:11434"
+    # volumes:
+    #   - ollama_data:/root/.ollama
+    # restart: unless-stopped
+    # networks:
+    #   - web-proxy
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2.0'
+    #       memory: 4G
+    #     reservations:
+    #       cpus: '1.0'
+    #       memory: 2G
+    # logging:
+    #   driver: "json-file"
+    #   options:
+    #     max-size: "10m"
+    #     max-file: "3"
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:11434/api/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 20s
+    # security_opt:
+    #   - no-new-privileges:true
+
+  langflow:
+    image: langflowai/langflow:latest
+    pull_policy: always
+    ports:
+      - "7860:7860"
+    environment:
+      - LANGFLOW_AUTO_LOGIN=false
+      - LANGFLOW_SUPERUSER=admin
+      - LANGFLOW_SUPERUSER_PASSWORD=caffeine
+      - LANGFLOW_SECRET_KEY=UHh_Z05ld3BwVnBRUXpqb2pvMmR4T19rX2ZuX1BOTTA=
+      - LANGFLOW_NEW_USER_IS_ACTIVE=false
+      - LANGFLOW_AUTO_SAVING=true
+      - DO_NOT_TRACK=true
+      # - LANGFLOW_DATABASE_URL=postgresql://langflow:langflow@postgres:5432/langflow
+    volumes:
+      - langflow_data:/root/.langflow
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "2500:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://dash.goseamless.co.za
+      - GF_SERVER_DOMAIN=dash.goseamless.co.za
+      - GF_SERVER_ENFORCE_DOMAIN=true
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      - GF_LIVE_ALLOWED_ORIGINS=*
+      - GF_LIVE_MAX_CONNECTIONS=100
+      - GF_LIVE_HA_ENGINE=redis
+      - GF_LIVE_HA_ENGINE_ADDRESS=redis://redis:6379
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - web-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.core.somaxconn: 1024
 
 volumes:
   caddy_data:
     external: true
   n8n_data:
+    external: true
+  ollama_data:
+    external: true
+  grafana_data:
+    external: true
+  langflow_data:
+    external: true
+
+networks:
+  web-proxy:
     external: true

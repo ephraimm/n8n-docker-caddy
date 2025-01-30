@@ -1,0 +1,128 @@
+services:
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - ${DATA_FOLDER}/caddy_config:/config
+      - ${DATA_FOLDER}/caddy_config/Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - web-proxy
+      
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    environment:
+      - LOG_LEVEL=DEBUG
+    ports:
+      - "3030:3000"
+    networks:
+      - web-proxy
+
+  n8n:
+    build:
+      context: .
+      dockerfile: ./n8n.dockerfile
+    restart: always
+    ports:
+      - 5678:5678
+    env_file:
+      - .env
+    environment:
+      - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - GOOGLE_APPLICATION_CREDENTIALS=/files/${GOOGLE_APPLICATION_CREDENTIALS_FILE}
+      - N8N_LOG_LEVEL=debug
+      - N8N_SMTP_HOST=smtp.gmail.com
+      - N8N_SMTP_PORT=587
+      - N8N_SMTP_USER=ephraim@goseamless.co.za
+      - N8N_SMTP_PASS=frioohwbgvliqgds
+      - N8N_SMTP_SENDER=noreply@goseamless.co.za
+      - N8N_SMTP_SSL=false
+      - N8N_SMTP_TLS=true
+      - N8N_SMTP_IGNORE_TLS=false
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ${DATA_FOLDER}/local_files:/files
+    networks:
+      - web-proxy
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - web-proxy
+
+  langflow:
+    image: langflowai/langflow:latest # or another version tag on https://hub.docker.com/r/langflowai/langflow 
+    pull_policy: always               # set to 'always' when using 'latest' image
+    ports:
+      - "7860:7860"
+    # depends_on:
+    #   - postgres
+    environment:
+      - LANGFLOW_AUTO_LOGIN=false
+      - LANGFLOW_SUPERUSER=admin
+      - LANGFLOW_SUPERUSER_PASSWORD=caffeine
+      - LANGFLOW_SECRET_KEY=UHh_Z05ld3BwVnBRUXpqb2pvMmR4T19rX2ZuX1BOTTA=
+      - LANGFLOW_NEW_USER_IS_ACTIVE=false
+      - LANGFLOW_AUTO_SAVING=true
+      - DO_NOT_TRACK=true
+      # - LANGFLOW_DATABASE_URL=postgresql://langflow:langflow@postgres:5432/langflow
+      # This variable defines where the logs, file storage, monitor data and secret keys are stored.
+    volumes:
+      - langflow_data:/app/langflow
+    networks:
+      - web-proxy
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "2500:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://dash.goseamless.co.za
+      - GF_SERVER_DOMAIN=dash.goseamless.co.za
+      - GF_SERVER_ENFORCE_DOMAIN=true
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      - GF_LIVE_ALLOWED_ORIGINS=*
+      - GF_LIVE_MAX_CONNECTIONS=100
+      - GF_LIVE_HA_ENGINE=redis
+      - GF_LIVE_HA_ENGINE_ADDRESS=redis://redis:6379
+    networks:
+      - web-proxy
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    networks:
+      - web-proxy
+
+volumes:
+  caddy_data:
+    external: true
+  n8n_data:
+    external: true
+  ollama_data:
+    external: true
+  grafana_data:
+    external: true
+  langflow_data:
+    external: true
+
+networks:
+  web-proxy:
+    external: true
